@@ -157,7 +157,7 @@ private struct BlockCard: View {
 
     @ViewBuilder private var content: some View {
         switch block.content {
-        case .richText:
+        case .text:
             editor
         case .math(let latex):
             // Reading shows only the result; editing adds the source line above
@@ -173,6 +173,8 @@ private struct BlockCard: View {
                         }
                     }
             }
+        case .unknown:
+            EmptyView()
         }
     }
 

@@ -25,7 +25,10 @@ Contexts runs as an accessory app with no Dock icon and no menu bar. Quit it wit
 - **Pin:** click the pin at the top left. The panel moves to the top-right of the screen and stays open; its buttons hide while the pointer is away and come back when it returns. Click the pin again, or press Escape, to unpin.
 - **Escape:** ends editing, then closes the options, delete mode, and History, then hides the panel.
 
-Blocks are saved to `~/Library/Application Support/Contexts/blocks.json`.
+Blocks are saved to `~/Contexts/blocks-mac.json`, in a format shared with the planned Ubuntu app.
+- Each device writes only its own `blocks-<device>.json` and merges everyone's, so the folder can be synced with Syncthing without conflicts.
+- Change the folder or the device name with `defaults write local.contexts syncFolder <path>` / `deviceName <name>`.
+- The first launch of this version migrates the old `~/Library/Application Support/Contexts/blocks.json` and keeps it as `blocks.v1-backup.json`.
 
 ## Layout
 

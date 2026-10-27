@@ -34,7 +34,9 @@ final class PanelModel {
     private(set) var isChoosingNewBlock = false
     private(set) var isEditingList = false
     private(set) var blockPendingDeletion: Block.ID?
-    private(set) var editingBlockID: Block.ID?
+    private(set) var editingBlockID: Block.ID? {
+        didSet { store.editingBlockID = editingBlockID }
+    }
     /// A two-finger swipe in progress on one row; nil once it settles open or closed.
     private(set) var swipe: Swipe?
     /// Name of the action the undo button would reverse, while it is offered.
@@ -163,7 +165,7 @@ final class PanelModel {
 
     func create(_ option: NewBlockOption) {
         commitEditing()
-        let block = option.makeBlock()
+        let block = Block(content: option.emptyContent, device: store.device)
         withAnimation(.panel) {
             isChoosingNewBlock = false
             tab = .recent
@@ -280,7 +282,9 @@ final class PanelModel {
     }
 
     func delete(_ id: Block.ID) {
-        replace(id, with: nil, at: .front, actionName: "Delete")
+        guard var block = store.block(id) else { return }
+        block.deletedAt = .now
+        apply(block, actionName: "Delete")
         withAnimation(.panel) {
             blockPendingDeletion = nil
             if listedBlocks.isEmpty { isEditingList = false }
@@ -292,7 +296,8 @@ final class PanelModel {
         guard var block = store.block(id) else { return }
         block.archivedAt = nil
         block.lastUsed = .now
-        replace(id, with: block, at: .front, actionName: "Restore")
+        block.surfacedAt = .now
+        apply(block, actionName: "Restore")
         withAnimation(.panel) { tab = .recent }
         offerUndo()
     }
@@ -304,43 +309,22 @@ final class PanelModel {
 
     // MARK: Private
 
-    /// Where a block goes back: in front of the block that used to follow it,
-    /// or at its old index if that one is gone too.
-    private struct Slot {
-        var index: Int
-        var follower: Block.ID?
-
-        static let front = Slot(index: 0, follower: nil)
-    }
-
-    /// Swaps whatever is stored under `id` for `block` (nil removes it) and
+    /// Stores `block`'s state (deleted, archived, where it sits in Recent) and
     /// registers the exact inverse, so undo and redo are the same operation.
-    /// Only state and position swap: text typed in between is kept.
-    private func replace(_ id: Block.ID, with block: Block?, at slot: Slot, actionName: String) {
+    /// Only state swaps: text typed in between is kept.
+    private func apply(_ block: Block, actionName: String) {
+        guard let previous = store.block(block.id) else { return }
         var block = block
-        if let current = store.block(id) { block?.content = current.content }
-        let previous: (block: Block, slot: Slot)? = withAnimation(.panel) {
-            let removed = store.remove(id).map { removed in
-                let follower = removed.index < store.blocks.count ? store.blocks[removed.index].id : nil
-                return (removed.block, Slot(index: removed.index, follower: follower))
-            }
-            if let block { store.insert(block, at: index(of: slot)) }
-            return removed
-        }
+        block.content = previous.content
+        withAnimation(.panel) { store.put(block) }
         store.saveIfNeeded()
         if undoManager.isUndoing || undoManager.isRedoing {
             withAnimation(.panel) { undoableAction = nil }
         }
         undoManager.registerUndo(withTarget: self) { model in
-            MainActor.assumeIsolated {
-                model.replace(id, with: previous?.block, at: previous?.slot ?? slot, actionName: actionName)
-            }
+            MainActor.assumeIsolated { model.apply(previous, actionName: actionName) }
         }
         undoManager.setActionName(actionName)
-    }
-
-    private func index(of slot: Slot) -> Int {
-        slot.follower.flatMap { follower in store.blocks.firstIndex { $0.id == follower } } ?? slot.index
     }
 
     private func offerUndo() {
@@ -356,7 +340,7 @@ final class PanelModel {
     /// Blocks untouched for the configured interval move to History before the panel shows.
     private func archiveUnusedBlocks() {
         guard let interval = ArchivePolicy.interval else { return }
-        store.archiveBlocks(unusedSince: .now - interval)
+        store.archiveBlocks(unusedSince: .now - Millis(interval * 1000))
     }
 
     /// A new block left empty is discarded silently. An existing block that was
@@ -365,13 +349,19 @@ final class PanelModel {
         guard let id = editingBlockID else { return }
         let original = contentBeforeEditing
         contentBeforeEditing = nil
+        // Re-stamp a changed block so this edit beats anything that arrived
+        // mid-edit; clearing editingBlockID then merges those remote changes in.
+        if let current = store.block(id)?.content, current != original {
+            store.update(id, content: current)
+        }
         withAnimation(.panel) { editingBlockID = nil }
-        if store.block(id)?.isBlank == true {
-            if let original, !Block(content: original).isBlank {
+        if var block = store.block(id), block.isBlank {
+            if let original, !Block(content: original, device: store.device).isBlank {
                 store.update(id, content: original)
                 delete(id)
             } else {
-                withAnimation(.panel) { _ = store.remove(id) }
+                block.deletedAt = .now
+                withAnimation(.panel) { store.put(block) }
             }
         }
         store.saveIfNeeded()

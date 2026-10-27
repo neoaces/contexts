@@ -25,9 +25,18 @@ struct BlockEditor: NSViewRepresentable {
         return textView
     }
 
+    /// While read-only, the text follows the stored content, which can change
+    /// underneath it when another device's edit is merged in.
     func updateNSView(_ textView: BlockTextView, context: Context) {
-        context.coordinator.parent = self
+        let coordinator = context.coordinator
+        coordinator.parent = self
         textView.onActivate = onActivate
+        if !isEditing, !textView.isEditable, content != coordinator.shownContent {
+            textView.textStorage?.setAttributedString(content.editableText)
+            textView.invalidateIntrinsicContentSize()
+            coordinator.clearUndoHistory()
+        }
+        if !isEditing { coordinator.shownContent = content }
         textView.setEditing(isEditing)
     }
 
@@ -45,10 +54,13 @@ struct BlockEditor: NSViewRepresentable {
     @MainActor
     final class Coordinator: NSObject, NSTextViewDelegate {
         var parent: BlockEditor
+        /// What the text view currently displays, to notice content replaced from outside.
+        var shownContent: Block.Content
         private let undoStack = UndoManager()
 
         init(_ parent: BlockEditor) {
             self.parent = parent
+            shownContent = parent.content
         }
 
         func clearUndoHistory() {
@@ -60,7 +72,9 @@ struct BlockEditor: NSViewRepresentable {
         func textDidChange(_ notification: Notification) {
             guard let textView = notification.object as? NSTextView else { return }
             textView.invalidateIntrinsicContentSize()
-            parent.onChange(parent.content.replacingText(with: textView.attributedString()))
+            let content = parent.content.replacingText(with: textView.attributedString())
+            shownContent = content
+            parent.onChange(content)
         }
 
         func textView(_ textView: NSTextView, doCommandBy selector: Selector) -> Bool {
