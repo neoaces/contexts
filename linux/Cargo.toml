@@ -1,0 +1,13 @@
+[package]
+name = "contexts-linux"
+version = "0.1.0"
+edition = "2021"
+
+# Pinned to the gtk-rs 0.9 generation (GTK 4.14, libadwaita 1.5 on Ubuntu 24.04):
+# ratex-gtk4 needs it, and Cargo can't link two gtk4-sys versions.
+# Don't enable v4_16 or v1_6; noble doesn't have them.
+[dependencies]
+gtk = { package = "gtk4", version = "0.9.7", features = ["gnome_46"] }
+adw = { package = "libadwaita", version = "0.7.2", features = ["v1_5"] }
+gdk4-x11 = "0.9"
+ratex-gtk4 = "=0.1.15"

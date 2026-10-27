@@ -30,6 +30,18 @@ Blocks are saved to `~/Contexts/blocks-mac.json`, in a format shared with the pl
 - Change the folder or the device name with `defaults write local.contexts syncFolder <path>` / `deviceName <name>`.
 - The first launch of this version migrates the old `~/Library/Application Support/Contexts/blocks.json` and keeps it as `blocks.v1-backup.json`.
 
+## Ubuntu (in progress)
+
+A GTK app (`linux/`) and a GNOME Shell 46 extension (`gnome-extension/contexts@local/`) for Ubuntu 24.04 on X11.
+
+```sh
+sudo apt install build-essential pkg-config libgtk-4-dev libadwaita-1-dev
+./scripts/install-linux.sh          # app to ~/.local/bin, extension linked
+gnome-extensions enable contexts@local
+```
+
+Restart the shell with Alt+F2, `r` to load extension changes. Logs: `journalctl -f -o cat /usr/bin/gnome-shell`.
+
 ## Layout
 
 ```

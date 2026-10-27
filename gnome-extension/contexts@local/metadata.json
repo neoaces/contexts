@@ -1,0 +1,7 @@
+{
+  "uuid": "contexts@local",
+  "name": "Contexts Edge",
+  "description": "Right-edge panel for Contexts",
+  "shell-version": ["46"],
+  "session-modes": ["user", "unlock-dialog"]
+}
