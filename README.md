@@ -18,7 +18,7 @@ Contexts runs as an accessory app with no Dock icon and no menu bar. Quit it wit
 
 - **Show:** rest the pointer on the right edge for a moment. The header appears under the pointer and blocks drop below it. Near the bottom of the screen they stack upward instead.
 - **New text block:** click **+**, then **Text**. You're typing immediately; an empty block is discarded when you leave it.
-- **Edit:** click anywhere in a block's text. Return confirms the block; Shift-Return starts a new line. Escape or clicking elsewhere also ends editing. ⌘B, ⌘I and ⌘U toggle bold, italic and underline.
+- **Edit:** click anywhere in a block's text. Return confirms the block; Shift-Return starts a new line. Escape or clicking elsewhere also ends editing. ⌘B, ⌘I and ⌘U toggle bold, italic and underline. Typing `->` or `<-` makes an arrow (→ ←; also `<->`, `=>`, `<=>`); ⌘Z right after keeps what you typed.
 - **Math:** click **+**, then **Math**, and type LaTeX without `$` delimiters. The preview below it updates as you type. Shift-Return adds a line to the source; Return confirms.
 - **Delete:** swipe left on a block with two fingers to uncover **Delete**, or click **≡**, then **⊖**. Swipe right or click the block to close it again.
 - **Undo:** after a delete or restore, an **Undo** button appears in the header for 5 seconds. ⌘Z and ⇧⌘Z also work once you've clicked the panel. Inside a block, ⌘Z undoes typing.

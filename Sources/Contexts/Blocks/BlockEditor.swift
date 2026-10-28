@@ -100,6 +100,11 @@ final class BlockTextView: NSTextView {
     var onActivate: (() -> Bool)?
     /// Set when editing begins before the view has a window (a freshly created block).
     private var needsFocus = false
+    /// Where typing just made a `←`, which a `>` typed right after widens to `↔`.
+    /// Any selection change forgets it.
+    private var madeLeftArrow: Int?
+    /// Set while `unmarkText` commits marked text through `insertText`.
+    private var isCommittingMarkedText = false
 
     func configure(richText: Bool) {
         isEditable = false
@@ -168,6 +173,27 @@ final class BlockTextView: NSTextView {
         super.mouseDown(with: event)
     }
 
+    /// A single typed character can finish an arrow in rich text (see `Arrows`);
+    /// paste, drop and input method text never do.
+    override func insertText(_ string: Any, replacementRange: NSRange) {
+        let typed = (string as? String) ?? (string as? NSAttributedString)?.string ?? ""
+        let isComposing = hasMarkedText() || isCommittingMarkedText
+        let leftArrow = madeLeftArrow
+        super.insertText(string, replacementRange: replacementRange)
+        if isRichText, !isComposing, typed.utf16.count == 1 { makeArrow(typing: typed, leftArrow: leftArrow) }
+    }
+
+    override func unmarkText() {
+        isCommittingMarkedText = true
+        defer { isCommittingMarkedText = false }
+        super.unmarkText()
+    }
+
+    override func setSelectedRanges(_ ranges: [NSValue], affinity: NSSelectionAffinity, stillSelecting: Bool) {
+        super.setSelectedRanges(ranges, affinity: affinity, stillSelecting: stillSelecting)
+        madeLeftArrow = nil
+    }
+
     /// Pasted text adopts the block's style rather than the source app's fonts and colors.
     override func paste(_ sender: Any?) {
         pasteAsPlainText(sender)
@@ -182,6 +208,50 @@ final class BlockTextView: NSTextView {
         window.makeKey()
         window.makeFirstResponder(self)
         setSelectedRange(NSRange(location: (string as NSString).length, length: 0))
+    }
+
+    /// Replaces the pair just typed before the caret with its arrow, in the style
+    /// of its first character. A style toggled since still applies to what follows.
+    private func makeArrow(typing typed: String, leftArrow: Int?) {
+        guard let textStorage else { return }
+        let text = textStorage.string as NSString
+        let typedAt = selectedRange().location - 1
+        guard typedAt >= 0 else { return }
+        let before = text.substring(with: NSRange(location: max(0, typedAt - 2), length: min(2, typedAt)))
+        guard let (arrow, replacing) = Arrows.arrow(typing: typed, after: before, afterMadeLeftArrow: leftArrow == typedAt - 1)
+        else { return }
+        let range = NSRange(location: typedAt - replacing, length: replacing + 1)
+        let attributes = textStorage.attributes(at: range.location, effectiveRange: nil)
+        let typing = typingAttributes
+        replaceAsUndoStep(range, with: NSAttributedString(string: arrow, attributes: attributes))
+        typingAttributes = typing
+        if arrow == "←" { madeLeftArrow = range.location }
+    }
+
+    /// Replaces `range` with `replacement`, caret after it, as an undo step of its
+    /// own that makes the reverse replacement. So ⌘Z right after an arrow gives
+    /// back what was typed, as autocorrect does, and typing on doesn't overwrite it.
+    private func replaceAsUndoStep(_ range: NSRange, with replacement: NSAttributedString) {
+        guard let textStorage, let undoManager else { return }
+        breakUndoCoalescing()
+        undoManager.disableUndoRegistration()
+        let shouldChange = shouldChangeText(in: range, replacementString: replacement.string)
+        undoManager.enableUndoRegistration()
+        guard shouldChange else { return }
+
+        // Undo is grouped by event, so the character just typed may be in the open
+        // group. Start a new one, which the event's end still closes.
+        if !undoManager.isUndoing, !undoManager.isRedoing, undoManager.groupingLevel == 1 {
+            undoManager.endUndoGrouping()
+            undoManager.beginUndoGrouping()
+        }
+        let replaced = textStorage.attributedSubstring(from: range)
+        undoManager.registerUndo(withTarget: self) { textView in
+            textView.replaceAsUndoStep(NSRange(location: range.location, length: replacement.length), with: replaced)
+        }
+        textStorage.replaceCharacters(in: range, with: replacement)
+        didChangeText()
+        setSelectedRange(NSRange(location: range.location + replacement.length, length: 0))
     }
 
     /// Reads and sets the stored style, not font traits: emoji and CJK are drawn
