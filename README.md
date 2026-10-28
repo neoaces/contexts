@@ -9,6 +9,7 @@ Block kinds: rich text and math (LaTeX).
 ```sh
 ./scripts/build-app.sh
 open build/Contexts.app
+./scripts/test.sh   # swift test, plus the Testing.framework paths the Command Line Tools need
 ```
 
 Contexts runs as an accessory app with no Dock icon and no menu bar. Quit it with ⌘Q while a block is being edited, or with `pkill Contexts`.
@@ -18,7 +19,7 @@ Contexts runs as an accessory app with no Dock icon and no menu bar. Quit it wit
 - **Show:** rest the pointer on the right edge for a moment. The header appears under the pointer and blocks drop below it. Near the bottom of the screen they stack upward instead.
 - **New text block:** click **+**, then **Text**. You're typing immediately; an empty block is discarded when you leave it.
 - **Edit:** click anywhere in a block's text. Return confirms the block; Shift-Return starts a new line. Escape or clicking elsewhere also ends editing. ⌘B, ⌘I and ⌘U toggle bold, italic and underline.
-- **Math:** click **+**, then **Math**, and type LaTeX without `$` delimiters on the single source line. The preview below it updates as you type. Return confirms.
+- **Math:** click **+**, then **Math**, and type LaTeX without `$` delimiters. The preview below it updates as you type. Shift-Return adds a line to the source; Return confirms.
 - **Delete:** swipe left on a block with two fingers to uncover **Delete**, or click **≡**, then **⊖**. Swipe right or click the block to close it again.
 - **Undo:** after a delete or restore, an **Undo** button appears in the header for 5 seconds. ⌘Z and ⇧⌘Z also work once you've clicked the panel. Inside a block, ⌘Z undoes typing.
 - **History:** blocks unused for 30 minutes move to the **History** tab when the panel next opens. Click one to bring it back. Change the delay with `defaults write local.contexts archiveAfterMinutes -int 60`; `0` turns archiving off.
@@ -42,7 +43,7 @@ gnome-extensions enable contexts@local
 
 - Restart the shell with Alt+F2, `r` to load extension changes; `pkill contexts-linux` to load a new app build (the extension relaunches it). Logs: `journalctl -f -o cat /usr/bin/gnome-shell`.
 - Settings are environment variables, set in `~/.config/environment.d/contexts.conf` (the shell launches the app): `CONTEXTS_FOLDER` (default `~/Contexts`), `CONTEXTS_DEVICE` (`ubuntu`), `CONTEXTS_ARCHIVE_MINUTES` (30; 0 turns archiving off).
-- Tests: `cargo test` in `linux/`, including the merge cases in `fixtures/sync-v2/` that the Mac tests should share.
+- Tests: `cargo test` in `linux/`, including the merge cases in `fixtures/sync-v2/`, which the Mac tests (`./scripts/test.sh`) run too.
 
 ## Layout
 

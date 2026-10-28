@@ -13,5 +13,6 @@ let package = Package(
             dependencies: [.product(name: "SwiftMath", package: "SwiftMath")],
             path: "Sources/Contexts"
         ),
+        .testTarget(name: "ContextsTests", dependencies: ["Contexts"], path: "Tests/ContextsTests"),
     ]
 )

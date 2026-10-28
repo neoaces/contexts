@@ -26,7 +26,8 @@ private struct MathLabel: NSViewRepresentable {
     }
 
     func updateNSView(_ view: MathPreviewView, context: Context) {
-        if view.label.latex != latex { view.label.latex = latex }
+        let renderable = LaTeX.renderable(latex)
+        if view.label.latex != renderable { view.label.latex = renderable }
     }
 
     /// With no width offered (ViewThatFits asking, or inside the scroll view)

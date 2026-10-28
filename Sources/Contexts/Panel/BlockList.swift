@@ -160,7 +160,7 @@ private struct BlockCard: View {
         case .text:
             editor
         case .math(let latex):
-            // Reading shows only the result; editing adds the source line above
+            // Reading shows only the result; editing adds the source above
             // and sets the result in a slightly darker well. Source that fails
             // to parse stays visible, so the block is never just an error.
             VStack(spacing: 8) {
