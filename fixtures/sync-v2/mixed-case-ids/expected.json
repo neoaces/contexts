@@ -1,0 +1,19 @@
+{
+  "blocks": [
+    {
+      "archivedAt": null,
+      "deletedAt": null,
+      "id": "0b4f3c1e-2d9a-4c51-9f0e-6a7d2b1c8e44",
+      "kind": "text",
+      "lastUsed": 1000,
+      "modifiedAt": 2000,
+      "modifiedBy": "mac",
+      "runs": [
+        {
+          "t": "upper, newer"
+        }
+      ],
+      "surfacedAt": 1000
+    }
+  ]
+}

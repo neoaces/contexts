@@ -1,0 +1,51 @@
+{
+  "blocks": [
+    {
+      "archivedAt": null,
+      "deletedAt": 8640000000,
+      "id": "0b4f3c1e-2d9a-4c51-9f0e-6a7d2b1c8e44",
+      "kind": "text",
+      "lastUsed": 1000,
+      "modifiedAt": 8640000000,
+      "modifiedBy": "ubuntu",
+      "runs": [
+        {
+          "t": "gone"
+        }
+      ],
+      "surfacedAt": 1000
+    },
+    {
+      "archivedAt": null,
+      "deletedAt": 8640000000,
+      "id": "1c5a4d2f-3e0b-4d62-8a1f-7b8e3c2d9f55",
+      "kind": "text",
+      "lastUsed": 1000,
+      "modifiedAt": 8640000000,
+      "modifiedBy": "ubuntu",
+      "runs": [
+        {
+          "t": "live on mac"
+        }
+      ],
+      "surfacedAt": 1000
+    },
+    {
+      "archivedAt": null,
+      "deletedAt": 16416000000,
+      "id": "2d6b5e3a-4f1c-4e73-9b2a-8c9f4d3e0a66",
+      "kind": "text",
+      "lastUsed": 1000,
+      "modifiedAt": 16416000000,
+      "modifiedBy": "ubuntu",
+      "runs": [
+        {
+          "t": "recent"
+        }
+      ],
+      "surfacedAt": 1000
+    }
+  ],
+  "device": "ubuntu",
+  "schema": 2
+}

@@ -1,0 +1,32 @@
+{
+  "blocks": [
+    {
+      "archivedAt": null,
+      "deletedAt": null,
+      "id": "2d6b5e3a-4f1c-4e73-9b2a-8c9f4d3e0a66",
+      "kind": "image",
+      "lastUsed": 1000,
+      "modifiedAt": 6000,
+      "modifiedBy": "mac",
+      "png": "iVBORw0KGgo=",
+      "size": {
+        "h": 20,
+        "w": 10
+      },
+      "surfacedAt": 1000
+    },
+    {
+      "archivedAt": null,
+      "deletedAt": null,
+      "id": "0b4f3c1e-2d9a-4c51-9f0e-6a7d2b1c8e44",
+      "kind": "math",
+      "lastUsed": 1000,
+      "latex": "\\frac{a}{b}",
+      "modifiedAt": 1000,
+      "modifiedBy": "mac",
+      "surfacedAt": 1000
+    }
+  ],
+  "device": "mac",
+  "schema": 2
+}

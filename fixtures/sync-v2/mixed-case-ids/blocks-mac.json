@@ -1,0 +1,21 @@
+{
+  "blocks": [
+    {
+      "archivedAt": null,
+      "deletedAt": null,
+      "id": "0B4F3C1E-2D9A-4C51-9F0E-6A7D2B1C8E44",
+      "kind": "text",
+      "lastUsed": 1000,
+      "modifiedAt": 2000,
+      "modifiedBy": "mac",
+      "runs": [
+        {
+          "t": "upper, newer"
+        }
+      ],
+      "surfacedAt": 1000
+    }
+  ],
+  "device": "mac",
+  "schema": 2
+}
