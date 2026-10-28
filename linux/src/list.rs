@@ -16,24 +16,13 @@ use crate::editor::{Editor, Kind};
 use crate::header::toggle_class;
 use crate::math::MathView;
 use crate::model::{Model, State, Tab};
-use crate::slide::SlideBin;
 
 /// Header row height plus the spacing under it.
 const HEADER_HEIGHT: i32 = 34 + 8;
-/// How far a row slides left to uncover its Delete button.
-const DELETE_REVEAL: f64 = 84.0;
 const CARD_PADDING: i32 = 12;
 const ANIMATION_MS: u32 = 70;
 const STAGGER_MS: u64 = 6;
 const STAGGER_ROWS: usize = 6;
-
-/// A spring that settles in about `response` seconds, with a little bounce.
-fn spring(response: f64) -> adw::SpringParams {
-    adw::SpringParams::new(0.85, 1.0, (2.0 * std::f64::consts::PI / response).powi(2))
-}
-
-/// The Mac's 0.07 s panel spring is over in four frames; the delete reveal needs to be seen.
-const DELETE_SPRING: f64 = 0.3;
 
 pub struct BlockList {
     pub root: gtk::ScrolledWindow,
@@ -180,13 +169,9 @@ struct Row {
     id: Uuid,
     revealer: gtk::Revealer,
     minus: gtk::Revealer,
-    minus_button: gtk::Button,
-    slide: SlideBin,
     card: gtk::Box,
     body: Body,
     leaving: Cell<bool>,
-    animation: RefCell<Option<adw::SpringAnimation>>,
-    target: Cell<f64>,
 }
 
 impl Row {
@@ -203,10 +188,7 @@ impl Row {
             Body::Math(math) => math.root.upcast_ref(),
         });
 
-        let delete = gtk::Button::builder().label("Delete").focus_on_click(false).can_focus(false).build();
-        delete.add_css_class("contexts-delete");
-        let slide = SlideBin::new(&card, &delete);
-        slide.set_hexpand(true);
+        card.set_hexpand(true);
 
         let minus_button = gtk::Button::builder()
             .icon_name("list-remove-symbolic")
@@ -224,7 +206,7 @@ impl Row {
 
         let outer = gtk::Box::new(gtk::Orientation::Horizontal, 0);
         outer.append(&minus);
-        outer.append(&slide);
+        outer.append(&card);
         let revealer = gtk::Revealer::builder()
             .transition_type(if upward { gtk::RevealerTransitionType::SlideUp } else { gtk::RevealerTransitionType::SlideDown })
             .transition_duration(ANIMATION_MS)
@@ -235,21 +217,15 @@ impl Row {
             id,
             revealer,
             minus,
-            minus_button,
-            slide,
             card,
             body,
             leaving: Cell::new(false),
-            animation: RefCell::new(None),
-            target: Cell::new(0.0),
         });
 
         let m = model.clone();
-        delete.connect_clicked(move |_| m.delete(id));
-        let m = model.clone();
-        row.minus_button.connect_clicked(move |_| m.toggle_deletion(id));
+        minus_button.connect_clicked(move |_| m.delete(id));
 
-        // A click starts editing in place; in delete mode or History it does only that.
+        // A click starts editing in place; in delete mode it does nothing, in History it restores.
         let click = gtk::GestureClick::new();
         click.set_propagation_phase(gtk::PropagationPhase::Capture);
         let m = model.clone();
@@ -327,28 +303,6 @@ impl Row {
         }
 
         self.minus.set_reveal_child(state.editing_list);
-        let armed = state.pending_deletion == Some(self.id);
-        toggle_class(&self.minus_button, "armed", armed);
-        self.slide_to(if armed { -DELETE_REVEAL } else { 0.0 });
-    }
-
-    fn slide_to(&self, target: f64) {
-        if self.target.replace(target) == target {
-            return;
-        }
-        if let Some(animation) = self.animation.take() {
-            animation.pause();
-        }
-        let slide = self.slide.clone();
-        let animation = adw::SpringAnimation::new(
-            &self.slide,
-            self.slide.offset(),
-            target,
-            spring(DELETE_SPRING),
-            adw::CallbackAnimationTarget::new(move |value| slide.set_offset(value)),
-        );
-        animation.play();
-        self.animation.replace(Some(animation));
     }
 }
 

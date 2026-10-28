@@ -48,16 +48,11 @@ button.plus.open image { transform: rotate(45deg); }
   color: alpha(@window_fg_color, 0.6);
 }
 .contexts-tabs button:checked { background-color: alpha(@window_fg_color, 0.12); color: @window_fg_color; }
-button.contexts-delete {
-  background-color: @destructive_bg_color; color: @destructive_fg_color;
-  border-radius: 16px; font-weight: 600; padding: 0;
-}
 button.contexts-minus {
   min-width: 20px; min-height: 20px; padding: 0; margin-right: 8px; border-radius: 10px;
   background-color: @destructive_bg_color; color: @destructive_fg_color;
-  -gtk-icon-size: 14px; transition: transform 70ms ease-out;
+  -gtk-icon-size: 14px;
 }
-button.contexts-minus.armed { transform: rotate(-90deg); }
 .contexts-editor, .contexts-editor > text { background: none; color: inherit; }
 .contexts-math { border-radius: 10px; padding: 2px 0; }
 .contexts-math.editing { background-color: alpha(black, 0.14); padding: 10px 0; }

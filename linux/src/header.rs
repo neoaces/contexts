@@ -208,8 +208,6 @@ mod tests {
         eprintln!("delete-named buttons: {}", minus.len());
         minus.iter().find(|b| b.has_css_class("contexts-minus")).unwrap().emit_clicked();
         spin();
-        find(&list.root, "Delete").iter().find(|b| b.has_css_class("contexts-delete")).unwrap().emit_clicked();
-        spin();
         assert_eq!(model.listed().len(), 1);
         assert_eq!(model.state().undoable_action, Some("Delete"));
         assert_eq!(header.slot.visible_child_name().as_deref(), Some("undo"));

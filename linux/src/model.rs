@@ -38,7 +38,6 @@ pub struct State {
     pub tab: Tab,
     pub choosing_new_block: bool,
     pub editing_list: bool,
-    pub pending_deletion: Option<Uuid>,
     pub editing: Option<Uuid>,
     /// Name of the action the undo button would reverse, while it is offered.
     pub undoable_action: Option<&'static str>,
@@ -174,7 +173,6 @@ impl Model {
         self.commit_editing();
         self.update(|s| {
             s.editing_list = false;
-            s.pending_deletion = None;
             s.tab = tab;
         });
     }
@@ -184,7 +182,6 @@ impl Model {
     pub fn toggle_new_block_options(self: &Rc<Self>) {
         self.update(|s| {
             s.editing_list = false;
-            s.pending_deletion = None;
             s.choosing_new_block = !s.choosing_new_block;
         });
     }
@@ -208,11 +205,10 @@ impl Model {
     // Editing
 
     /// A click on a block. Returns whether it should start editing in place:
-    /// in delete mode a click only disarms, and in History it restores the block.
+    /// not in delete mode, and in History a click restores the block instead.
     pub fn activate(self: &Rc<Self>, id: Uuid) -> bool {
         let state = self.state();
-        if state.editing_list || state.pending_deletion.is_some() {
-            self.update(|s| s.pending_deletion = None);
+        if state.editing_list {
             return false;
         }
         if state.tab == Tab::History {
@@ -255,13 +251,8 @@ impl Model {
         self.commit_editing();
         self.update(|s| {
             s.choosing_new_block = false;
-            s.pending_deletion = None;
             s.editing_list = !s.editing_list;
         });
-    }
-
-    pub fn toggle_deletion(self: &Rc<Self>, id: Uuid) {
-        self.update(|s| s.pending_deletion = if s.pending_deletion == Some(id) { None } else { Some(id) });
     }
 
     pub fn delete(self: &Rc<Self>, id: Uuid) {
@@ -269,12 +260,9 @@ impl Model {
         block.deleted_at = Some(block::now());
         self.apply(block, "Delete");
         let empty = self.listed().is_empty();
-        self.update(|s| {
-            s.pending_deletion = None;
-            if empty {
-                s.editing_list = false;
-            }
-        });
+        if empty {
+            self.update(|s| s.editing_list = false);
+        }
         self.offer_undo();
     }
 
@@ -401,7 +389,6 @@ impl Model {
 
 fn reset_transient(state: &mut State) {
     state.editing_list = false;
-    state.pending_deletion = None;
     state.tab = Tab::Recent;
 }
 
@@ -426,7 +413,6 @@ mod tests {
         assert_eq!(model.listed().len(), 1);
 
         model.toggle_list_editing();
-        model.toggle_deletion(id);
         model.delete(id);
         assert!(model.listed().is_empty());
         assert_eq!(model.state().undoable_action, Some("Delete"));
