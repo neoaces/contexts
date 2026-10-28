@@ -182,13 +182,29 @@ impl Panel {
             panel.set_accepts_input(false);
         });
 
-        // Clicking elsewhere ends editing, as on the Mac.
+        // Clicking elsewhere ends editing, as on the Mac. This follows Mutter's
+        // focused flag: is-active never changes for this window on X11.
         let model = self.model.clone();
-        self.window.connect_is_active_notify(move |window| {
-            if !window.is_active() {
-                model.end_editing();
+        self.window.connect_realize(move |window| {
+            let Some(toplevel) = window.surface().and_downcast::<gdk::Toplevel>() else { return };
+            let model = model.clone();
+            toplevel.connect_state_notify(move |toplevel| {
+                if !toplevel.state().contains(gdk::ToplevelState::FOCUSED) {
+                    model.end_editing();
+                }
+            });
+        });
+        // Mutter doesn't always focus the panel on a click, so the click asks for it.
+        let click = gtk::GestureClick::new();
+        click.set_propagation_phase(gtk::PropagationPhase::Capture);
+        let window = self.window.downgrade();
+        click.connect_pressed(move |gesture, _, _, _| {
+            let Some(toplevel) = window.upgrade().and_then(|w| w.surface()).and_downcast::<gdk::Toplevel>() else { return };
+            if !toplevel.state().contains(gdk::ToplevelState::FOCUSED) {
+                toplevel.focus(gesture.current_event_time());
             }
         });
+        self.window.add_controller(click);
         // Alt+F4 would destroy the one window for good; treat it like Escape.
         let panel = self.clone();
         self.window.connect_close_request(move |_| {
