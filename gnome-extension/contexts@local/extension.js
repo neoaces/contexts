@@ -26,6 +26,7 @@ const MARGIN = 12;           // gap to the screen edge
 const HEADER_CENTER = 30;    // panel edge to header center, so the header lands under the pointer
 const UPWARD_BELOW = 320;    // closer than this to the bottom, the list grows upward
 const ANIM_MS = 70;
+const PIN_MS = 150;          // the move to the top-right when pinned
 const SLIDE = 10;
 const RELAUNCH_MS = 1000;
 
@@ -123,7 +124,8 @@ export default class ContextsEdge extends Extension {
             this._relaunchId = 0;
             this._launchedAt = GLib.get_monotonic_time() / 1000;
             try {
-                Gio.Subprocess.new([APP_PATH], Gio.SubprocessFlags.NONE);
+                // Waited on so it doesn't linger as a zombie once it exits.
+                Gio.Subprocess.new([APP_PATH], Gio.SubprocessFlags.NONE).wait_async(null, () => {});
             } catch (e) {
                 console.error(`Contexts: launching ${APP_PATH} failed: ${e.message}`);
             }
@@ -159,11 +161,18 @@ export default class ContextsEdge extends Extension {
     _onAppSignal(signal, params) {
         if (signal === 'StateChanged') {
             const [pinned, editing] = params.deepUnpack();
-            const pinChanged = pinned !== this._pinned;
+            const pinning = pinned && !this._pinned;
             this._pinned = pinned;
             this._editing = editing;
-            if (pinChanged)
-                this._place();
+            // Pinned, the panel parks at the top-right and grows down from there.
+            // It stays there when unpinned, and closes from there.
+            if (pinning && this._shown) {
+                const wa = this._workArea();
+                this._upward = false;
+                this._anchorY = wa.y + MARGIN + HEADER_CENTER;
+                this._sendLimit();
+                this._place(true);
+            }
         } else if (signal === 'Dismiss') {
             this._hide();
         }
@@ -232,6 +241,7 @@ export default class ContextsEdge extends Extension {
         this._anchorY = pointerY;
         this._upward = wa.y + wa.height - pointerY < UPWARD_BELOW;
         this._shown = true;
+        this._sendLimit();
         this._callApp('show', new GLib.Variant('b', this._upward));
         this._place();
         if (!this._win.above)
@@ -240,6 +250,7 @@ export default class ContextsEdge extends Extension {
 
         actor.remove_all_transitions();
         actor.opacity = 0;
+        actor.translation_x = 0;
         actor.translation_y = this._upward ? SLIDE : -SLIDE;
         actor.ease({
             opacity: 255, translation_y: 0,
@@ -262,7 +273,7 @@ export default class ContextsEdge extends Extension {
             return;
         }
         actor.ease({
-            opacity: 0, translation_y: this._upward ? SLIDE : -SLIDE,
+            opacity: 0, translation_x: 0, translation_y: this._upward ? SLIDE : -SLIDE,
             duration: ANIM_MS, mode: Clutter.AnimationMode.EASE_IN_QUAD,
             onComplete: () => {
                 if (!this._shown)
@@ -271,23 +282,37 @@ export default class ContextsEdge extends Extension {
         });
     }
 
-    // Top-right; the header sits under the pointer, or at the top of the work area when pinned.
-    _place() {
+    // Top-right, with the header under the anchor (the pointer, or the top when pinned).
+    // `animate` glides there: the window moves at once, its picture follows.
+    _place(animate = false) {
         if (!this._win || !this._shown)
             return;
         const wa = this._workArea();
         const frame = this._win.get_frame_rect();
         const x = wa.x + wa.width - frame.width - MARGIN;
-        let y;
-        if (this._pinned)
-            y = wa.y + MARGIN;
-        else if (this._upward)
-            y = this._anchorY + HEADER_CENTER - frame.height;
-        else
-            y = this._anchorY - HEADER_CENTER;
+        let y = this._upward ? this._anchorY + HEADER_CENTER - frame.height : this._anchorY - HEADER_CENTER;
         y = Math.max(wa.y, Math.min(y, wa.y + wa.height - frame.height));
-        if (x !== frame.x || y !== frame.y)
-            this._win.move_frame(true, x, y);
+        if (x === frame.x && y === frame.y)
+            return;
+        this._win.move_frame(true, x, y);
+        const actor = this._win.get_compositor_private();
+        if (!animate || !actor)
+            return;
+        actor.translation_x += frame.x - x;
+        actor.translation_y += frame.y - y;
+        actor.ease({
+            translation_x: 0, translation_y: 0,
+            duration: PIN_MS, mode: Clutter.AnimationMode.EASE_OUT_QUAD,
+        });
+    }
+
+    // The most the panel may grow to: from the anchor to the edge it grows towards.
+    _sendLimit() {
+        const wa = this._workArea();
+        const limit = this._upward
+            ? Math.min(wa.y + wa.height, this._anchorY + HEADER_CENTER) - wa.y
+            : wa.y + wa.height - Math.max(wa.y, this._anchorY - HEADER_CENTER);
+        this._callApp('limit', new GLib.Variant('i', Math.round(limit)));
     }
 
     // Stays open while the pointer is near the panel or on the edge, or while pinned or editing.

@@ -10,7 +10,13 @@ use std::cell::Cell;
 use std::rc::Rc;
 
 use adw::prelude::*;
+use contexts::folder::SyncFolder;
+use contexts::store::Store;
 use gtk::{cairo, gdk, gio, glib};
+
+use crate::header::Header;
+use crate::list::BlockList;
+use crate::model::Model;
 
 /// Content width; the extension keeps the panel 12px from the screen edge.
 const WIDTH: i32 = 336;
@@ -20,23 +26,54 @@ const INTERFACE: &str = "local.contexts.Panel";
 
 const CSS: &str = "
 window.contexts-panel { background: none; }
-.contexts-card {
+.contexts-card, .contexts-circle, .contexts-capsule, .contexts-tabs {
   background-color: @window_bg_color;
   color: @window_fg_color;
-  border-radius: 16px;
-  padding: 12px;
+  border: 1px solid alpha(@window_fg_color, 0.1);
+  box-shadow: none;
 }
+.contexts-card { border-radius: 16px; padding: 12px; }
+.contexts-card.editing { background-color: mix(@window_bg_color, @accent_bg_color, 0.12); }
+button.contexts-circle { min-width: 32px; min-height: 32px; padding: 0; border-radius: 17px; }
+button.contexts-capsule { min-height: 32px; padding: 0 14px; border-radius: 17px; font-weight: 500; }
+button.contexts-circle:hover, button.contexts-capsule:hover { background-color: mix(@window_bg_color, @window_fg_color, 0.06); }
+button.contexts-circle:active, button.contexts-capsule:active { background-color: mix(@window_bg_color, @window_fg_color, 0.12); }
+button.contexts-circle.active { color: @accent_color; }
+button.plus image { transition: transform 70ms ease-out; }
+button.plus.open image { transform: rotate(45deg); }
+.contexts-tabs { border-radius: 17px; padding: 2px; }
+.contexts-tabs button {
+  min-height: 28px; padding: 0 12px; border-radius: 14px;
+  background: none; box-shadow: none; font-weight: 500;
+  color: alpha(@window_fg_color, 0.6);
+}
+.contexts-tabs button:checked { background-color: alpha(@window_fg_color, 0.12); color: @window_fg_color; }
+button.contexts-delete {
+  background-color: @destructive_bg_color; color: @destructive_fg_color;
+  border-radius: 16px; font-weight: 600; padding: 0;
+}
+button.contexts-minus {
+  min-width: 20px; min-height: 20px; padding: 0; margin-right: 8px; border-radius: 10px;
+  background-color: @destructive_bg_color; color: @destructive_fg_color;
+  -gtk-icon-size: 14px; transition: transform 70ms ease-out;
+}
+button.contexts-minus.armed { transform: rotate(-90deg); }
+.contexts-editor, .contexts-editor > text { background: none; color: inherit; }
+.contexts-math { border-radius: 10px; padding: 2px 0; }
+.contexts-math.editing { background-color: alpha(black, 0.14); padding: 10px 0; }
 ";
 
 struct Panel {
     window: gtk::ApplicationWindow,
-    content: gtk::Box,
-    header: gtk::Box,
-    pin: gtk::ToggleButton,
-    entry: gtk::Entry,
+    root: gtk::Box,
+    header: Header,
+    list: BlockList,
+    model: Rc<Model>,
     connection: Option<gio::DBusConnection>,
     /// Last state sent to the extension, so only changes are sent.
     sent: Cell<Option<(bool, bool)>>,
+    syncing: Cell<bool>,
+    resync: Cell<bool>,
     _hold: gio::ApplicationHoldGuard,
 }
 
@@ -49,55 +86,62 @@ pub fn install(app: &adw::Application) {
         gtk::STYLE_PROVIDER_PRIORITY_APPLICATION,
     );
 
-    let panel = Rc::new(Panel::new(app));
+    let model = Model::new(Store::open(SyncFolder::standard()));
+    let panel = Rc::new(Panel::new(app, model));
     panel.add_actions(app);
     panel.connect_signals();
+    let weak = Rc::downgrade(&panel);
+    panel.model.connect_changed(move || {
+        if let Some(panel) = weak.upgrade() {
+            panel.sync();
+        }
+    });
+    let weak = Rc::downgrade(&panel);
+    panel.model.connect_dismiss(move || {
+        if let Some(panel) = weak.upgrade() {
+            panel.emit("Dismiss", None);
+        }
+    });
+    let model = panel.model.clone();
+    app.connect_shutdown(move |_| model.prepare_for_termination());
+    panel.sync();
     // Not present(): that also asks the window manager for focus.
     panel.window.set_visible(true);
 }
 
 impl Panel {
-    fn new(app: &adw::Application) -> Self {
-        let pin = gtk::ToggleButton::builder()
-            .icon_name("view-pin-symbolic")
-            .tooltip_text("Pin")
-            .focus_on_click(false)
-            .can_focus(false)
-            .build();
-        pin.add_css_class("circular");
-        let header = gtk::Box::new(gtk::Orientation::Horizontal, 8);
-        header.append(&pin);
-        header.append(&gtk::Label::builder().label("Contexts").hexpand(true).xalign(1.0).build());
-        let entry = gtk::Entry::builder().placeholder_text("Type here").build();
-
-        let content = gtk::Box::builder()
+    fn new(app: &adw::Application, model: Rc<Model>) -> Self {
+        let header = Header::new(&model);
+        let list = BlockList::new(&model, WIDTH);
+        let root = gtk::Box::builder()
             .orientation(gtk::Orientation::Vertical)
             .spacing(8)
             .width_request(WIDTH)
             .opacity(0.0)
             .build();
-        content.add_css_class("contexts-card");
-        content.append(&header);
-        content.append(&entry);
+        root.append(&header.root);
+        root.append(&list.root);
 
         let window = gtk::ApplicationWindow::builder()
             .application(app)
             .title("Contexts")
             .decorated(false)
             .resizable(false)
-            .child(&content)
+            .child(&root)
             .build();
         window.remove_css_class("background");
         window.add_css_class("contexts-panel");
 
         Self {
             window,
-            content,
+            root,
             header,
-            pin,
-            entry,
+            list,
+            model,
             connection: app.dbus_connection(),
             sent: Cell::new(None),
+            syncing: Cell::new(false),
+            resync: Cell::new(false),
             _hold: app.hold(),
         }
     }
@@ -113,6 +157,16 @@ impl Panel {
         let panel = self.clone();
         hide.connect_activate(move |_, _| panel.hide());
         app.add_action(&hide);
+
+        // `limit(height)`: the most the panel may grow to, from where it is placed.
+        let limit = gio::SimpleAction::new("limit", Some(glib::VariantTy::INT32));
+        let panel = self.clone();
+        limit.connect_activate(move |_, arg| {
+            if let Some(height) = arg.and_then(|v| v.get::<i32>()) {
+                panel.list.set_limit(height);
+            }
+        });
+        app.add_action(&limit);
 
         let quit = gio::SimpleAction::new("quit", None);
         let app_ref = app.clone();
@@ -133,18 +187,13 @@ impl Panel {
             panel.set_accepts_input(false);
         });
 
-        let panel = self.clone();
+        // Clicking elsewhere ends editing, as on the Mac.
+        let model = self.model.clone();
         self.window.connect_is_active_notify(move |window| {
-            // Clicking elsewhere ends editing, as on the Mac.
             if !window.is_active() {
-                clear_focus(window);
+                model.end_editing();
             }
-            panel.send_state();
         });
-        let panel = self.clone();
-        self.window.connect_focus_widget_notify(move |_| panel.send_state());
-        let panel = self.clone();
-        self.pin.connect_toggled(move |_| panel.send_state());
         // Alt+F4 would destroy the one window for good; treat it like Escape.
         let panel = self.clone();
         self.window.connect_close_request(move |_| {
@@ -152,38 +201,87 @@ impl Panel {
             glib::Propagation::Stop
         });
 
-        // Escape ends editing, then unpins, then closes the panel.
-        let keys = gtk::EventControllerKey::new();
-        keys.set_propagation_phase(gtk::PropagationPhase::Capture);
-        let panel = self.clone();
-        keys.connect_key_pressed(move |_, key, _, _| {
-            if key != gdk::Key::Escape {
-                return glib::Propagation::Proceed;
-            }
-            if panel.is_editing() {
-                clear_focus(&panel.window);
-            } else if panel.pin.is_active() {
-                panel.pin.set_active(false);
+        // A held Return or Escape that just confirmed a block must not go on to
+        // close the panel: its repeats are dropped until the key is released.
+        let held = gtk::EventControllerKey::new();
+        held.set_propagation_phase(gtk::PropagationPhase::Capture);
+        let model = self.model.clone();
+        held.connect_key_pressed(move |_, key, _, _| {
+            if model.held_commit_key.get() == Some(key) {
+                glib::Propagation::Stop
             } else {
-                panel.emit("Dismiss", None);
+                glib::Propagation::Proceed
+            }
+        });
+        let model = self.model.clone();
+        held.connect_key_released(move |_, key, _, _| {
+            if model.held_commit_key.get() == Some(key) {
+                model.held_commit_key.set(None);
+            }
+        });
+        self.window.add_controller(held);
+
+        // Escape outside a block closes the innermost open state; Ctrl+Z undoes
+        // deletes and restores (inside a block, the text view undoes typing).
+        let keys = gtk::EventControllerKey::new();
+        let model = self.model.clone();
+        keys.connect_key_pressed(move |_, key, _, modifiers| {
+            let control = modifiers.contains(gdk::ModifierType::CONTROL_MASK);
+            let shift = modifiers.contains(gdk::ModifierType::SHIFT_MASK);
+            match key {
+                gdk::Key::Escape => model.cancel(),
+                gdk::Key::z | gdk::Key::Z if control && model.state().editing.is_none() => {
+                    if shift {
+                        model.redo();
+                    } else {
+                        model.undo();
+                    }
+                }
+                _ => return glib::Propagation::Proceed,
             }
             glib::Propagation::Stop
         });
         self.window.add_controller(keys);
+
+        // The formula's color follows the theme's foreground at draw time.
+        let window = self.window.clone();
+        adw::StyleManager::default().connect_dark_notify(move |_| window.queue_draw());
     }
 
     fn show(&self, upward: bool) {
-        let first = if upward { Some(self.entry.upcast_ref::<gtk::Widget>()) } else { None };
-        self.content.reorder_child_after(&self.header, first);
+        self.model.held_commit_key.set(None);
+        self.model.present(upward);
         self.set_accepts_input(true);
-        self.content.set_opacity(1.0);
+        self.root.set_opacity(1.0);
     }
 
     fn hide(&self) {
-        clear_focus(&self.window);
-        self.pin.set_active(false);
-        self.content.set_opacity(0.0);
+        self.model.hidden();
+        self.root.set_opacity(0.0);
         self.set_accepts_input(false);
+    }
+
+    /// Re-entrant changes (a focus change while syncing) run one more pass.
+    fn sync(&self) {
+        if self.syncing.replace(true) {
+            self.resync.set(true);
+            return;
+        }
+        loop {
+            self.resync.set(false);
+            let state = self.model.state();
+            let blocks = self.model.listed();
+            self.header.sync(&state, !blocks.is_empty());
+            // Blocks grow away from the header: downward, or upward near the bottom of the screen.
+            let before = state.upward.then(|| self.list.root.clone().upcast::<gtk::Widget>());
+            self.root.reorder_child_after(&self.header.root, before.as_ref());
+            self.list.sync(&state, &blocks);
+            self.send_state(state.pinned, state.editing.is_some());
+            if !self.resync.get() {
+                break;
+            }
+        }
+        self.syncing.set(false);
     }
 
     fn set_accepts_input(&self, accepts: bool) {
@@ -197,14 +295,9 @@ impl Panel {
         surface.set_input_region(&region);
     }
 
-    fn is_editing(&self) -> bool {
-        self.window.is_active()
-            && GtkWindowExt::focus(&self.window).is_some_and(|w| w.is_ancestor(&self.entry))
-    }
-
     /// While pinned or editing, the extension keeps the panel open when the pointer leaves.
-    fn send_state(&self) {
-        let state = (self.pin.is_active(), self.is_editing());
+    fn send_state(&self, pinned: bool, editing: bool) {
+        let state = (pinned, editing);
         if self.sent.replace(Some(state)) != Some(state) {
             self.emit("StateChanged", Some(&state.to_variant()));
         }
@@ -216,8 +309,4 @@ impl Panel {
             glib::g_warning!("contexts", "Emitting {signal} failed: {error}");
         }
     }
-}
-
-fn clear_focus(window: &gtk::ApplicationWindow) {
-    GtkWindowExt::set_focus(window, None::<&gtk::Widget>);
 }

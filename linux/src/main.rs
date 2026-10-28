@@ -1,4 +1,10 @@
+mod editor;
+mod header;
+mod list;
+mod math;
+mod model;
 mod panel;
+mod slide;
 
 use adw::prelude::*;
 use gtk::glib;

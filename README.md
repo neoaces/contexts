@@ -30,9 +30,9 @@ Blocks are saved to `~/Contexts/blocks-mac.json`, in a format shared with the pl
 - Change the folder or the device name with `defaults write local.contexts syncFolder <path>` / `deviceName <name>`.
 - The first launch of this version migrates the old `~/Library/Application Support/Contexts/blocks.json` and keeps it as `blocks.v1-backup.json`.
 
-## Ubuntu (in progress)
+## Ubuntu
 
-A GTK app (`linux/`) and a GNOME Shell 46 extension (`gnome-extension/contexts@local/`) for Ubuntu 24.04 on X11.
+A GTK app (`linux/`) and a GNOME Shell 46 extension (`gnome-extension/contexts@local/`) for Ubuntu 24.04 on X11. It works like the Mac app (Ctrl in place of ⌘) and syncs through the same `~/Contexts` folder as `blocks-ubuntu.json`.
 
 ```sh
 sudo apt install build-essential pkg-config libgtk-4-dev libadwaita-1-dev
@@ -40,7 +40,9 @@ sudo apt install build-essential pkg-config libgtk-4-dev libadwaita-1-dev
 gnome-extensions enable contexts@local
 ```
 
-Restart the shell with Alt+F2, `r` to load extension changes. Logs: `journalctl -f -o cat /usr/bin/gnome-shell`.
+- Restart the shell with Alt+F2, `r` to load extension changes; `pkill contexts-linux` to load a new app build (the extension relaunches it). Logs: `journalctl -f -o cat /usr/bin/gnome-shell`.
+- Settings are environment variables, set in `~/.config/environment.d/contexts.conf` (the shell launches the app): `CONTEXTS_FOLDER` (default `~/Contexts`), `CONTEXTS_DEVICE` (`ubuntu`), `CONTEXTS_ARCHIVE_MINUTES` (30; 0 turns archiving off).
+- Tests: `cargo test` in `linux/`, including the merge cases in `fixtures/sync-v2/` that the Mac tests should share.
 
 ## Layout
 
